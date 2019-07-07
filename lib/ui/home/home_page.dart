@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:news_flutter/domain/models/entites/article_model.dart';
 import 'package:news_flutter/other/consts.dart';
-import 'package:news_flutter/ui/home/home_bloc.dart';
-import 'package:news_flutter/ui/home/home_event.dart';
-import 'package:news_flutter/ui/home/home_state.dart';
+
+import 'articles/bloc.dart';
+import 'categories/bloc.dart';
 
 class HomePage extends StatefulWidget {
   @override
@@ -12,74 +11,99 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  HomeBloc _homeBloc;
+  CategoriesBloc _categoriesBloc;
+  ArticlesBloc _articlesBloc;
 
   @override
   void initState() {
     super.initState();
-    _homeBloc = HomeBloc();
+    _categoriesBloc = CategoriesBloc();
+    _articlesBloc = ArticlesBloc();
+
+    _categoriesBloc.dispatch(LoadCategories());
+    _articlesBloc.dispatch(LoadArticles(Constants.BUSINESS));
   }
 
   @override
   void dispose() {
     super.dispose();
-    _homeBloc.dispose();
+    _categoriesBloc.dispose();
+    _articlesBloc.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final categoriesHeight = 150.0;
-    final parts = {"categories": Container(), "articles": Container()};
+
     return Scaffold(
         appBar: AppBar(
           title: Text("News", style: TextStyle(color: Colors.black)),
           backgroundColor: Colors.white,
         ),
         body: Container(
-          child: LayoutBuilder(
-            builder: (context, size) => BlocBuilder(
-                bloc: _homeBloc,
-                builder: (context, HomeState state) {
-                  if (state is InitialState) {
-                    _homeBloc.dispatch(LoadCategories());
-                  }
-
-                  if (state is DrawCategoriesState) {
-                    parts["categories"] = buildHorizontalCategories(
-                        categoriesHeight, state.categoriesWithCount);
-                    _homeBloc.dispatch(LoadArticles(Constants.BUSINESS));
-                  }
-
-                  if (state is DrawArticlesState) {
-                    parts["articles"] = buildArticlesList(
-                        size.maxHeight - categoriesHeight - 40, state.articles);
-                  }
-
-                  return Column(children: parts.values.toList());
-                }),
-          ),
-        ));
+            child: LayoutBuilder(
+                builder: (context, size) => Column(children: <Widget>[
+                      buildHorizontalCategories(categoriesHeight),
+                      buildArticlesList(size.maxHeight - categoriesHeight - 40)
+                    ]))));
   }
 
-  Widget buildHorizontalCategories(double heightSize, Map<String, int> categories) {
-    final list = List<Widget>();
+  Widget buildHorizontalCategories(double heightSize) {
+    return BlocBuilder<CategoriesEvent, CategoriesState>(
+      bloc: _categoriesBloc,
+      builder: (context, state) {
+        if (state is DrawCategoriesState) {
+          final categories = state.categoriesWithCount;
+          final list = List<Widget>();
 
-    categories.forEach((k, v) {
-      list.add(CategoryItem(
-          title: _getCategoryName(k),
-          count: "${categories[k]} статей",
-          color: _getCategoryColor(k),
-          onTap: () {
-            _homeBloc.dispatch(LoadArticles(k));
-          }));
-    });
+          categories.forEach((k, v) {
+            list.add(CategoryItem(
+                title: _getCategoryName(k),
+                count: "${categories[k]} статей",
+                color: _getCategoryColor(k),
+                onTap: () {
+                  _articlesBloc.dispatch(LoadArticles(k));
+                }));
+          });
 
-    list.add(Container(width: 10));
+          list.add(Container(width: 10));
 
-    return Container(
-        margin: EdgeInsets.symmetric(vertical: 20.0),
-        height: heightSize,
-        child: ListView(scrollDirection: Axis.horizontal, children: list));
+          return Container(
+              margin: EdgeInsets.symmetric(vertical: 20.0),
+              height: heightSize,
+              child:
+                  ListView(scrollDirection: Axis.horizontal, children: list));
+        }
+
+        return Container();
+      },
+    );
+  }
+
+  Widget buildArticlesList(double heightSize) {
+    return BlocBuilder<ArticlesEvent, ArticlesState>(
+      bloc: _articlesBloc,
+      builder: (context, state) {
+        if (state is DrawArticlesState) {
+          final articles = state.articles;
+          var list = articles.map((item) {
+            return ListTile(
+                title: Text(item.title),
+                leading: item.urlToImage != null
+                    ? CircleAvatar(
+                        backgroundImage: NetworkImage(item.urlToImage))
+                    : Container(),
+                subtitle: Text(item.category));
+          }).toList();
+
+          return Container(
+              height: heightSize,
+              child: ListView(scrollDirection: Axis.vertical, children: list));
+        }
+
+        return Container();
+      },
+    );
   }
 
   String _getCategoryName(String category) {
@@ -106,21 +130,6 @@ class _HomePageState extends State<HomePage> {
       return Colors.redAccent;
     }
     return Colors.blue;
-  }
-
-  Widget buildArticlesList(double heightSize, List<ArticleModel> articles) {
-    var list = articles.map((item) {
-      return ListTile(
-          title: Text(item.title),
-          leading: item.urlToImage != null
-              ? CircleAvatar(backgroundImage: NetworkImage(item.urlToImage))
-              : Container(),
-          subtitle: Text(item.category));
-    }).toList();
-
-    return Container(
-        height: heightSize,
-        child: ListView(scrollDirection: Axis.vertical, children: list));
   }
 }
 
